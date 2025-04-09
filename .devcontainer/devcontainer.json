@@ -1,0 +1,12 @@
+{
+  "name": "TensorFlow CPU",                     // nome do ambiente no VSCode
+  "dockerComposeFile": "../docker-compose.yml", // usa o compose da raiz do projeto
+  "service": "tf-cpu",                          // Nome do serviço que vai rodar (vem do docker-compose.yml)
+  "workspaceFolder": "/workspace",              // Pasta onde o VSCode vai abrir o projeto dentro do container
+  "extensions": [                               // Extensões instaladas automaticamente no VSCode
+    "ms-python.python",
+    "ms-toolsai.jupyter",
+    "ms-azuretools.vscode-docker"
+  ],
+  "forwardPorts": [8888]                        // Libera a porta 8888 pro Jupyter Lab
+}

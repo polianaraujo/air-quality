@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  tf-cpu:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    container_name: tf-cpu-container
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    tty: true
