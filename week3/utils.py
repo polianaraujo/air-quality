@@ -294,11 +294,18 @@ def calculate_mae_for_nearest_station(df: pd.core.frame.DataFrame, target: str) 
         df (pd.core.frame.DataFrame): The dataframe
         target (str): The chosen pollutant for which it plots the distribution
     '''
+    
+    # Remove linhas de valores ausentes
     df2 = df.dropna(inplace=False)
+    
+    # Cria uma coluna de tempo com os valores de data e hora, realizando os cálculos necessários para transformá-los em inteiros
     df2.insert(0, 'time_discriminator', (df2['DateTime'].dt.dayofyear * 100000 + df2['DateTime'].dt.hour * 100).values, True)
 
+    # Dados de treino e teste
     train_df, test_df = train_test_split(df2, test_size=0.2, random_state=57)
-
+    
+    # Treinando o KNN com n_neighbors=1 usando o time, latitude e longitude e o valor real do poluente
+    # n_neighbors=1 pois quer usar apenas 1 vizinho mais próximo para inferir um valor ausente
     imputer = KNNImputer(n_neighbors=1)
     imputer.fit(train_df[['time_discriminator','Latitude', 'Longitude', target]])
 
@@ -306,11 +313,15 @@ def calculate_mae_for_nearest_station(df: pd.core.frame.DataFrame, target: str) 
 
     y_test = test_df[target].values
 
+    # Copia o test_df e zera (coloca NaN) os valores reais do poluente no conjunto de teste, simulando dados faltantes que queremos imputar
     test_df2 = test_df.copy()
     test_df2.loc[test_df.index, target] = float("NAN")
-
+    
+    # Aplica o KNN para estimar os valores de `target` ausentes (usando o vizinho mais próximo no espaço `tempo-lat-long`)
+    # Pega apenas a coluna do poluente estimado (índice 3)
     y_pred = imputer.transform(test_df2[['time_discriminator', 'Latitude', 'Longitude', target]])[:,3]
     
+    # Calcula o erro entre os valores previstos (y_pred) e os valores reais (y_test) no polunete no conjunto de teste.
     return {"MAE": mean_absolute_error(y_pred, y_test)}    
 
 
