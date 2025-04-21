@@ -249,7 +249,8 @@ def create_heat_map_with_date_range(
     # Filtro de data inicial e final
     df_days = df[df['DateTime'] >= start_date]
     df_days = df_days[df_days['DateTime'] <= end_date]
-
+    
+    # Para cada estação, plota: A concentração do poluente ao longo das horas; Uma linha verde tracejada no valor 12, que parece ser o limite recomendado.
     for key in df_days.Station.unique():
         dates = df_days[df_days['Station']==key]['DateTime']
         plt.plot(dates, df_days[df_days['Station']==key][target_pollutant], '-o')
@@ -264,10 +265,11 @@ def create_heat_map_with_date_range(
 
     k = k_neighbors
     neigh = KNeighborsRegressor(n_neighbors=k, weights = 'distance', metric=distance_metric)
-    # Filter a single time step
+    # Treino com: Usa como features a Latitude e Longitude; Como variável-alvo a concentração do poluente no end_date (último instante do período)
     df_day = df_days[df_days['DateTime'] == end_date]
     neigh.fit(df_day[['Latitude', 'Longitude']], df_day[[target_pollutant]])
 
+    
     predictions_xy, dlat, dlon = predict_on_bogota(neigh, 64)
 
     map_hooray = create_heat_map(predictions_xy, df_day, dlat, dlon, target_pollutant, popup_plots=True)
@@ -458,3 +460,73 @@ def create_circle(
         },
     }
     return feature
+
+
+# -------------------TESTE DE REDE NEURAL ---------------------------------------
+def create_nn_heat_map_with_date_range(
+    df: pd.core.frame.DataFrame,
+    start_date: datetime,
+    end_date: datetime,
+    target_pollutant: str='PM2.5',
+    number_epochs: int=200
+) -> folium.Map:
+    '''
+    Cria um heatmap das predições do poluente usando redes neurais
+    
+    Args:
+        df (pd.core.frame.DataFrame): DataFrame com dados.
+        start_date (datetime): data inicial para o heatmap
+        end_date (datetime): data final para o heatmap
+        target_pollutant (str): poluente alvo (ex: 'PM2.5')
+        number_epochs (int): número de épocas para treinar o modelo
+
+    Returns:
+        map_hooray (folium.Map): Mapa com heatmap interpolado
+    '''
+    # Filtrar dados no intervalo
+    df_days = df[(df['DateTime'] >= start_date) & (df['DateTime'] <= end_date)]
+
+    # Para cada estação, gerar gráfico — opcional
+    for key in df_days.Station.unique():
+        dates = df_days[df_days['Station']==key]['DateTime']
+        plt.plot(dates, df_days[df_days['Station']==key][target_pollutant], '-o')
+        plt.plot(dates, [12] * len(dates),'--g', label='recommended level')
+        plt.title(f'Station {key}')
+        plt.xlabel('hour')
+        plt.ylabel(f'{target_pollutant} concentration')
+        plt.legend(loc='upper left')
+        plt.xticks(rotation=30)
+        plt.savefig(f'img/tmp/{key}.png')
+        plt.clf()
+
+    # Separar dados para o momento final
+    df_day = df_days[df_days['DateTime'] == end_date]
+    
+    # Definir features e target
+    feature_names = ['Latitude', 'Longitude']
+    target = target_pollutant
+
+    # Como temos pouco dado para cada instante, vamos usar tudo pra treino
+    train_df = df_day.copy()
+    test_df = df_day.copy()  # no caso não há "teste real", pois o objetivo é interpolação espacial
+
+    # Construir e treinar modelo
+    model = build_keras_model(input_size=len(feature_names))
+    model, scaler, mae = train_and_test_model(
+        feature_names,
+        target,
+        train_df,
+        test_df,
+        model,
+        number_epochs=number_epochs
+    )
+
+    print(f'MAE de treino: {mae["MAE"]:.2f}')
+
+    # Criar grid de pontos para predição no mapa
+    predictions_xy, dlat, dlon = predict_on_bogota_nn(model, scaler, 64)
+
+    # Criar mapa heatmap com as predições
+    map_hooray = create_heat_map(predictions_xy, df_day, dlat, dlon, target_pollutant, popup_plots=True)
+
+    return map_hooray
