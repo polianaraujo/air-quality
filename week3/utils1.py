@@ -245,6 +245,8 @@ def create_heat_map_with_date_range(
     Returns:
         map_hooray (folium.Map): Heatmap on the map.
     '''
+    
+    # Filtro de data inicial e final
     df_days = df[df['DateTime'] >= start_date]
     df_days = df_days[df_days['DateTime'] <= end_date]
 
