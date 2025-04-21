@@ -305,44 +305,67 @@ def create_map_with_plots(full_data: pd.core.frame.DataFrame, x_variable: str, y
     Create a map to visualize geo points. The popup will show a scatterplot with the average daily/hourly emisions.
         
     Args:
-        full_data (pd.core.frame.DataFrame): The dataframe with the data.
-        x_variable (str): The x variable on the popup plot. can be day_of_week or hour_of_day
-        y_variable (str): A pollutant to be shown on y axis
+        full_data (pd.core.frame.DataFrame): DataFrame contendo latitude, longitude, nome da estação, variáveis temporais e poluentes.
+        x_variable (str): Variável para o eixo x do gráfico no popup (dia da semana ou hora do dia).
+        y_variable (str): A pollutant to be shown on y axis (padrão é PM2.5).
     
     '''
 
     data = full_data[['Latitude', 'Longitude', y_variable, 'Station', x_variable]]
+    
+    #Agrupa os dados por estação e pela variável temporal (x_variable), calculando média e desvio padrão para o poluente escolhido.
     data_grouped = data.groupby(['Station', x_variable]).agg(({y_variable: ['mean', 'std']}))
+    
+    # Define os limites mínimo e máximo (ymin, ymax) das médias, para manter os gráficos consistentes na escala.
     ymin = data_grouped[y_variable]['mean'].min()
     ymax = data_grouped[y_variable]['mean'].max()
-
-    grouped_means = defaultdict(dict)
-    grouped_stds = defaultdict(dict)
+    
+    # Organizando resultados em dicionários
+    grouped_means = defaultdict(dict)   # Dicionário com médias
+    grouped_stds = defaultdict(dict)    # Dicionário com desviopadrão
+    
+    # Para cada combinação Station, x_variable, armazena:
     for index, row in data_grouped.iterrows():
-        grouped_means[index[0]][index[1]] = row[0]
-        grouped_stds[index[0]][index[1]] = row[1]
+        grouped_means[index[0]][index[1]] = row[0]  # média do poluente
+        grouped_stds[index[0]][index[1]] = row[1]   # desvio padrão
 
+    # Para cada chave no dicionário (cada estação)
     for key in grouped_means:
+        #Se x for dia da semana, define a ordem dos dias da semana
         if (x_variable == 'day_of_week'):
             keys = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
             label = 'daily average'
+        # Se não, usa as chaves disponíveis de horas
         else:
+            # Define o label do gráfico como média diária ou média horária
             keys = list(grouped_means[key].keys())
             label = 'hourly average'
 
+        # Plotando gráficos
+        
+        # lista com as médias e desvio padrão dos poluentes para os valores de x
         values = []
         stds = []
+        
+        # Convertendo lista em array para cálculo vetorial
         for subkey in keys:
             values.append(grouped_means[key][subkey])
             stds.append(grouped_stds[key][subkey])
         values = np.array(values)
         stds = np.array(stds)
+        
+        # Plota média com marcadores circulares
         plt.plot(keys, values, '-o', label=label)
+        
+        # Faixa de desvio padrão
         plt.fill_between(keys, values - stds, values + stds, alpha=0.2)
+        
+        
         if y_variable == 'PM2.5':
             plt.plot(keys, [12]*len(keys),'--g', label='recommended level')
         plt.plot(keys, [np.average(values)]*len(keys), '--b', label='annual average')
         
+        # Define o limite do eixo y
         plt.ylim(ymin, ymax)
         plt.title(f'Station {key} avg. {y_variable} / {x_variable.split("_")[0]}')
         plt.ylabel(f'Avg. {y_variable} concentration')
@@ -354,8 +377,10 @@ def create_map_with_plots(full_data: pd.core.frame.DataFrame, x_variable: str, y
 
         plt.clf()
     
+    # Agrupa dados por estação: pega média geral do polunete, latitude e longitude
     data_grouped_grid = data.groupby('Station').agg(({y_variable: 'mean', 'Latitude': 'min', 'Longitude': 'min'}))
     
+    # dados agrupados em array transposto
     data_grouped_grid_array = np.array(
         [
             data_grouped_grid['Latitude'].values,
@@ -365,6 +390,7 @@ def create_map_with_plots(full_data: pd.core.frame.DataFrame, x_variable: str, y
         ]
     ).T
 
+    # cria mapa base com centro na posição da primeira estação
     map3 = folium.Map(
         location=[data_grouped_grid_array[0][0], data_grouped_grid_array[0][1]],
         tiles='openstreetmap',
@@ -373,6 +399,7 @@ def create_map_with_plots(full_data: pd.core.frame.DataFrame, x_variable: str, y
         height=500
     )
 
+    #PAra cada estação, cria um marcador circular na posição [lat,lon], define raio, cor, etc. 
     fg = folium.FeatureGroup(name="My Map")
     for lt, ln, pol, station in data_grouped_grid_array:
         fg.add_child(folium.CircleMarker(location=[lt, ln], radius = 15, popup=f"<img src='img/tmp/{station}.png'>",
