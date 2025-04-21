@@ -353,12 +353,13 @@ def build_keras_model(input_size: int) -> tf.keras.Model:
         model (tf.keras.Model): The neural network
     '''
     model = keras.Sequential([
-        layers.Dense(64, activation='relu', input_shape=[input_size]),
+        layers.Dense(64, activation='relu', input_shape=[input_size]), # Ajuda a quebrar a linearidade e introduzir não-linearidades no modelo
         layers.Dense(32, activation='relu'),
-        layers.Dense(1)
+        layers.Dense(1)                                                # camada de saída
       ])
 
-    optimizer = tf.keras.optimizers.RMSprop(0.007)
+    optimizer = tf.keras.optimizers.RMSprop(0.007)  # taxa de aprendizado 0,007
+    # RMSprop é muito bom pra problemas com dados ruidosos e adapta bem o passo de atualização.
 
     model.compile(loss='mse',
                 optimizer=optimizer,
@@ -392,12 +393,12 @@ def train_and_test_model(
         scaler (StandardScaler): scaler
         MAE (Dict[str, float]): Dictionary containing mean absolute error.
     '''
-    scaler = StandardScaler()
+    scaler = StandardScaler()           # normaliza as features pra média 0 e desvio padrão 1.
     
     X_train = train_df[feature_names]
-    scaler.fit(X_train)
-    X_train = scaler.transform(X_train)
-    y_train = train_df[target]
+    scaler.fit(X_train)                 #Ajusta o scaler aos dados de treino (calcula média e desvio padrão)
+    X_train = scaler.transform(X_train) # Transforma os dados (normaliza).
+    y_train = train_df[target]          # coluna do target de treino
     X_test = test_df[feature_names]
     X_test = scaler.transform(X_test)
     y_test = test_df[target]
