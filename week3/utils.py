@@ -199,12 +199,15 @@ def visualize_missing_values_estimation(df: pd.core.frame.DataFrame, day: dateti
     '''
     day = day.date()
 
-    # Filter out the data for the day for the USM station
+    # Filtra as linhas do DataFrame que correspondem ao dia escolhido
     rows_of_day = df.apply(lambda row : row['DateTime'].date() == day, axis=1)
     sample = df[rows_of_day]
     
+    # Desenhar gráfico
     def draw(sample, station, missing_index, target):
         sample = sample.copy()
+        
+        # Cria uma nova coluna numérica que mistura o dia do ano e hora, servindo como um "marcador temporal contínuo" para interpolação.
         sample.insert(
             0,
             'time_discriminator', 
@@ -212,30 +215,45 @@ def visualize_missing_values_estimation(df: pd.core.frame.DataFrame, day: dateti
             True
         )
 
+        # Separar dados reais da estação
         real = sample[sample['Station'] == station]
         example1 = real.copy()
         real = real.reset_index()
+        
+        #Simular valores faltantes - Força NaN nas posições missing_index pra testar a interpolação.
         example1 = example1.reset_index()
         example1.loc[missing_index, target] = float('NaN')
 
         missing = missing_index
+        
+        # Coletar os índices vizinhos e datas dos faltantes
         missing_before_after = [missing[0]-1] + missing + [missing[-1] + 1]
         dates = set(list(example1.loc[missing_index,'DateTime'].astype(str)))
 
+        # Plotar os valores reais
+        # Pega os valores reais nos índices antes, durante e depois dos faltantes.
         plt.figure(figsize=(10, 5))
         plt.plot(missing_before_after, real.loc[missing_before_after][target] , 'r--o', label='actual values')
-
+        
+        # Interpolação com KNN (vizinho mais próximo)
+        
         sample_copy = sample.copy()
         sample_copy = sample_copy.reset_index()
+        
+        #Substitui valores nos horários faltantes por NaN
         to_nan = sample_copy.apply(lambda row : str(row['DateTime']) in dates and row['Station'] == station, axis=1)
         sample_copy.loc[to_nan, target] = float('NaN')
+        
+        #  Preenche os valores ausentes com o valor mais próximo (baseado nas outras variáveis, incluindo localização e tempo)
         imputer = KNNImputer(n_neighbors=1)
         imputer.fit(sample_copy[['time_discriminator','Latitude', 'Longitude', target]])
         example1[f'new{target}'] = imputer.transform(example1[['time_discriminator', 'Latitude', 'Longitude', target]])[:,3]
         plt.plot(missing_before_after, example1.loc[missing_before_after][f'new{target}'], 'g--o', label='nearest neighbor')
 
         plt.plot(example1.index, example1[target], '-*')
-
+        
+        # Preenchimento com forward fill (last known value)
+        # Propaga o último valor válido anterior para frente (forward fill)
         example1[f'ffill{target}'] = example1.fillna(method='ffill')[target]
         plt.plot(missing_before_after, example1.loc[missing_before_after][f'ffill{target}'], 'y--*', label='last known value')
 
@@ -362,11 +380,11 @@ def train_and_test_model(
     and Evaluate the model.
     
     Args:
-        feature_names (List[str]): Names of feature columns
-        target (str): Name of the target column
-        train_df (pd.core.frame.DataFrame): Dataframe with training data
-        test_df (pd.core.frame.DataFrame): Dataframe with test data
-        model (tf.keras.Model): Model to be fit to the data
+        feature_names (List[str]): Lista com os nomes das colunas que serão usadas como features
+        target (str): Nome da coluna que será usada como variável alvo
+        train_df (pd.core.frame.DataFrame): DataFrame com dados de treinamento
+        test_df (pd.core.frame.DataFrame): DataFrame com dados de teste
+        model (tf.keras.Model): Modelo Keras (já criado, mas ainda não treinado)
         number_epochs (int): Number of epochs
     
     Returns:
