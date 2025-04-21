@@ -4,6 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error
 from sklearn.neighbors import KNeighborsRegressor
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+from sklearn.preprocessing import StandardScaler
 import json
 from shapely.geometry import shape, Point, Polygon
 import folium
@@ -463,6 +467,123 @@ def create_circle(
 
 
 # -------------------TESTE DE REDE NEURAL ---------------------------------------
+
+def predict_on_bogota_nn(
+    model: tf.keras.Model,
+    scaler: StandardScaler,
+    n_points: int = 64
+) -> Tuple[np.ndarray, float, float]:
+    ''' 
+    Creates a grid of predicted pollutant values based on a trained neural network model
+    
+    Args:
+        model (tf.keras.Model): Neural network model already trained
+        scaler (StandardScaler): Scaler fitted to the training features
+        n_points (int): number of points in the grid
+        
+    Returns:
+        predictions_xy (np.ndarray): array containing tuples of coordinates and predicted value
+        dlat (float): latitude size of grid
+        dlon (float): longitudinal size of grid
+    '''
+    with open('data/bogota.json') as f:
+        js = json.load(f)
+
+    polygon = Polygon(shape(js['features'][0]['geometry']))
+    (lon_min, lat_min, lon_max, lat_max) = polygon.bounds
+
+    dlat = (lat_max - lat_min) / (n_points - 1)
+    dlon = (lon_max - lon_min) / (n_points - 1)
+    lat_values = np.linspace(lat_min - dlat, lat_max + dlat, n_points)
+    lon_values = np.linspace(lon_min - dlon, lon_max + dlon, n_points)
+    xv, yv = np.meshgrid(lat_values, lon_values, indexing='xy')
+
+    predictions_xy = []
+
+    for i in range(n_points):
+        for j in range(n_points):
+            if polygon.contains(Point(lon_values[j], lat_values[i])):
+                point = np.array([[lat_values[i], lon_values[j]]])
+                point_scaled = scaler.transform(point)
+                pred = model.predict(point_scaled, verbose=0)
+                predictions_xy.append([lat_values[i], lon_values[j], pred[0][0]])
+
+    predictions_xy = np.array(predictions_xy)
+    
+    return predictions_xy, dlat, dlon
+
+
+
+def build_keras_model(input_size: int) -> tf.keras.Model:
+    '''Build a neural network with three fully connected layers (sizes: 64, 32, 1)
+    
+    Args:
+        input_size (int): The size of the input
+        
+    Returns:
+        model (tf.keras.Model): The neural network
+    '''
+    model = keras.Sequential([
+        layers.Dense(64, activation='relu', input_shape=[input_size]), # Ajuda a quebrar a linearidade e introduzir não-linearidades no modelo
+        layers.Dense(32, activation='relu'),
+        layers.Dense(1)                                                # camada de saída
+      ])
+
+    optimizer = tf.keras.optimizers.RMSprop(0.007)  # taxa de aprendizado 0,007
+    # RMSprop é muito bom pra problemas com dados ruidosos e adapta bem o passo de atualização.
+
+    model.compile(loss='mse',
+                optimizer=optimizer,
+                metrics=['mae'])
+    
+    return model
+
+
+def train_and_test_model(
+    feature_names: List[str],
+    target: str,
+    train_df: pd.core.frame.DataFrame,
+    test_df: pd.core.frame.DataFrame,
+    model: tf.keras.Model,
+    number_epochs: int=100
+) -> Tuple[tf.keras.Model, StandardScaler, Dict[str, float]]:
+    '''
+    This function will take the features (x), the target (y) and the model and will fit
+    and Evaluate the model.
+    
+    Args:
+        feature_names (List[str]): Lista com os nomes das colunas que serão usadas como features
+        target (str): Nome da coluna que será usada como variável alvo
+        train_df (pd.core.frame.DataFrame): DataFrame com dados de treinamento
+        test_df (pd.core.frame.DataFrame): DataFrame com dados de teste
+        model (tf.keras.Model): Modelo Keras (já criado, mas ainda não treinado)
+        number_epochs (int): Number of epochs
+    
+    Returns:
+        model (tf.keras.Model): Fitted model
+        scaler (StandardScaler): scaler
+        MAE (Dict[str, float]): Dictionary containing mean absolute error.
+    '''
+    scaler = StandardScaler()           # normaliza as features pra média 0 e desvio padrão 1.
+    
+    X_train = train_df[feature_names]
+    scaler.fit(X_train)                 #Ajusta o scaler aos dados de treino (calcula média e desvio padrão)
+    X_train = scaler.transform(X_train) # Transforma os dados (normaliza).
+    y_train = train_df[target]          # coluna do target de treino
+    X_test = test_df[feature_names]
+    X_test = scaler.transform(X_test)
+    y_test = test_df[target]
+
+    # Build and train model
+    model.fit(X_train, y_train, batch_size=64, epochs=number_epochs)
+    y_pred = model.predict(X_test)
+    #print(f"\nModel Score: {model.score(X_test, y_test)}")
+    MAE = {"MAE": mean_absolute_error(y_pred, y_test)}
+    return model, scaler, MAE
+
+
+
+
 def create_nn_heat_map_with_date_range(
     df: pd.core.frame.DataFrame,
     start_date: datetime,
@@ -530,3 +651,4 @@ def create_nn_heat_map_with_date_range(
     map_hooray = create_heat_map(predictions_xy, df_day, dlat, dlon, target_pollutant, popup_plots=True)
 
     return map_hooray
+
