@@ -222,12 +222,15 @@ def visualize_missing_values_estimation(df: pd.core.frame.DataFrame, day: dateti
         
         #Simular valores faltantes - Força NaN nas posições missing_index pra testar a interpolação.
         example1 = example1.reset_index()
+        # Selecionando as células da coluna target nas linhas indicadas por missing_index
         example1.loc[missing_index, target] = float('NaN')
 
         missing = missing_index
         
-        # Coletar os índices vizinhos e datas dos faltantes
+        # Cria uma lista com os índices dos valores faltantes simulados (missing) e mais um valor antes e um valor depois deles.
         missing_before_after = [missing[0]-1] + missing + [missing[-1] + 1]
+        
+        # Acessa os valores da coluna 'DateTime' apenas nas linhas com índices faltantes. Converte essas datas para strings, para facilitar a comparação. Coloca tudo em um set (conjunto), que elimina duplicatas e permite comparações rápidas.
         dates = set(list(example1.loc[missing_index,'DateTime'].astype(str)))
 
         # Plotar os valores reais
