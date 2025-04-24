@@ -337,7 +337,6 @@ def create_map_with_plots(full_data: pd.core.frame.DataFrame, x_variable: str, y
             label = 'daily average'
         # Se não, usa as chaves disponíveis de horas
         else:
-            # Define o label do gráfico como média diária ou média horária
             keys = list(grouped_means[key].keys())
             label = 'hourly average'
 
